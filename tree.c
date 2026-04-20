@@ -8,7 +8,8 @@
 //
 // Example single entry (conceptual):
 //   "100644 hello.txt\0" followed by 32 raw bytes of SHA-256
-
+#include "index.h"
+#include "object.h"
 #include "tree.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -129,31 +130,32 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
 //   - object_write    : save that binary buffer to the store as OBJ_TREE
 //
 // Returns 0 on success, -1 on error.
-int tree_from_index(Index *index, ObjectID *tree_id_out) {
-    // simple flat tree (no folders)
+int tree_from_index(ObjectID *tree_id_out) {
+    Index index;
 
-    // buffer to store serialized tree
+    // load index
+    if (index_load(&index) != 0) {
+        return -1;
+    }
+
     size_t buf_size = 0;
     char *buffer = NULL;
 
-    for (size_t i = 0; i < index->entry_count; i++) {
-        IndexEntry *e = &index->entries[i];
+    for (size_t i = 0; i < index.count; i++) {
+        IndexEntry *e = &index.entries[i];
 
         char line[512];
-        int len = snprintf(line, sizeof(line), "%06o blob %s %s\n",
-                           e->mode, e->hash_hex, e->path);
+        int len = snprintf(line, sizeof(line),
+                           "%06o blob %s %s\n",
+                           e->mode, e->hash, e->path);
 
         buffer = realloc(buffer, buf_size + len);
         memcpy(buffer + buf_size, line, len);
         buf_size += len;
     }
 
-    // write tree object
-    if (object_write(OBJ_TREE, buffer, buf_size, tree_id_out) != 0) {
-        free(buffer);
-        return -1;
-    }
+    int rc = object_write(OBJ_TREE, buffer, buf_size, tree_id_out);
 
     free(buffer);
-    return 0;
+    return rc;
 }
