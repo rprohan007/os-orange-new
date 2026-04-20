@@ -188,14 +188,39 @@ int head_update(const ObjectID *new_commit) {
 //   - head_read         : gets the parent commit hash (if any)
 //   - pes_author        : retrieves the author name string (from pes.h)
 //   - time(NULL)        : gets the current unix timestamp
-//   - commit_serialize  : converts the filled Commit struct to a text buffer
-//   - object_write      : saves the serialized text as OBJ_COMMIT
-//   - head_update       : moves the branch pointer to your new commit
-//
-// Returns 0 on success, -1 on error.
+//   - commit_serialize  : converts the filled Commit struct
+
 int commit_create(const char *message, ObjectID *commit_id_out) {
-    // TODO: Implement commit creation
-    // (See Lab Appendix for logical steps)
-    (void)message; (void)commit_id_out;
-    return -1;
+    Commit c;
+
+    // 1. Build tree from current index
+    if (tree_from_index(&c.tree) != 0) return -1;
+
+    // 2. Read current HEAD as parent (may not exist for first commit)
+    if (head_read(&c.parent) == 0) {
+        c.has_parent = 1;
+    } else {
+        c.has_parent = 0;
+    }
+
+    // 3. Fill in author, timestamp, message
+    snprintf(c.author, sizeof(c.author), "%s", pes_author());
+    c.timestamp = (uint64_t)time(NULL);
+    snprintf(c.message, sizeof(c.message), "%s", message);
+
+    // 4. Serialize and write to object store
+    void *data;
+    size_t len;
+    if (commit_serialize(&c, &data, &len) != 0) return -1;
+
+    ObjectID commit_id;
+    int rc = object_write(OBJ_COMMIT, data, len, &commit_id);
+    free(data);
+    if (rc != 0) return -1;
+
+    // 5. Update HEAD to new commit
+    if (head_update(&commit_id) != 0) return -1;
+
+    if (commit_id_out) *commit_id_out = commit_id;
+    return 0;
 }
